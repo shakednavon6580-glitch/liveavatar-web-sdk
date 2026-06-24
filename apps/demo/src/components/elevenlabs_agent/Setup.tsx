@@ -10,7 +10,7 @@ interface Secret {
 }
 
 interface Props {
-  onSessionStarted: (sessionToken: string) => void;
+  onSessionStarted: (sessionToken: string, apiUrl?: string) => void;
   onBack: () => void;
 }
 
@@ -140,13 +140,13 @@ export const Setup = ({ onSessionStarted, onBack }: Props) => {
         setError(err.error ?? "Failed to start session");
         return;
       }
-      const { session_token } = await res.json();
+      const { session_token, api_url } = await res.json();
       saveStoredSetup({
         agentId: agentId.trim(),
         secretId: selectedSecretId,
         avatarPresetId: selectedAvatarPresetId,
       });
-      onSessionStarted(session_token);
+      onSessionStarted(session_token, api_url);
     } catch (e) {
       setError((e as Error).message);
     } finally {

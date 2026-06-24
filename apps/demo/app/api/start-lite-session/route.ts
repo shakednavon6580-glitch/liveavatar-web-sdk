@@ -4,6 +4,13 @@ export async function POST() {
   let session_token = "";
   let session_id = "";
   try {
+    if (!API_KEY) {
+      return new Response(
+        JSON.stringify({ error: "LiveAvatar API key not configured" }),
+        { status: 500 },
+      );
+    }
+
     const res = await fetch(`${API_URL}/v1/sessions/token`, {
       method: "POST",
       headers: {
@@ -35,8 +42,6 @@ export async function POST() {
       );
     }
     const data = await res.json();
-    console.log(data);
-
     session_token = data.data.session_token;
     session_id = data.data.session_id;
   } catch (error: unknown) {
@@ -53,10 +58,13 @@ export async function POST() {
       },
     );
   }
-  return new Response(JSON.stringify({ session_token, session_id }), {
-    status: 200,
-    headers: {
-      "Content-Type": "application/json",
+  return new Response(
+    JSON.stringify({ session_token, session_id, api_url: API_URL }),
+    {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+      },
     },
-  });
+  );
 }

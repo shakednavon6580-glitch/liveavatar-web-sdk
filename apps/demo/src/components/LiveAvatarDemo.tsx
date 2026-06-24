@@ -10,6 +10,7 @@ export type SessionMode = "FULL" | "FULL_PTT" | "LITE";
 export const LiveAvatarDemo = () => {
   const router = useRouter();
   const [sessionToken, setSessionToken] = useState("");
+  const [sessionApiUrl, setSessionApiUrl] = useState<string | undefined>();
   const [mode, setMode] = useState<SessionMode>("FULL");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -33,8 +34,9 @@ export const LiveAvatarDemo = () => {
         setError(error.error);
         return;
       }
-      const { session_token } = await res.json();
+      const { session_token, api_url } = await res.json();
       setSessionToken(session_token);
+      setSessionApiUrl(api_url);
       setMode(pushToTalk ? "FULL_PTT" : "FULL");
     } catch (error: unknown) {
       setError((error as Error).message);
@@ -55,8 +57,9 @@ export const LiveAvatarDemo = () => {
         setError(error.error);
         return;
       }
-      const { session_token } = await res.json();
+      const { session_token, api_url } = await res.json();
       setSessionToken(session_token);
+      setSessionApiUrl(api_url);
       setMode("LITE");
     } catch (error: unknown) {
       setError((error as Error).message);
@@ -72,11 +75,13 @@ export const LiveAvatarDemo = () => {
       return;
     }
     setSessionToken(trimmed);
+    setSessionApiUrl(undefined);
     setMode(manualMode);
   };
 
   const onSessionStopped = () => {
     setSessionToken("");
+    setSessionApiUrl(undefined);
     setManualToken("");
   };
 
@@ -174,6 +179,7 @@ export const LiveAvatarDemo = () => {
         <LiveAvatarSession
           mode={mode}
           sessionAccessToken={sessionToken}
+          apiUrl={sessionApiUrl}
           voiceChatConfig={voiceChatConfig}
           onSessionStopped={onSessionStopped}
         />

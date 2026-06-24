@@ -439,17 +439,20 @@ const LiveAvatarSessionComponent: React.FC<{
 export const LiveAvatarSession: React.FC<{
   mode: SessionMode;
   sessionAccessToken: string;
+  apiUrl?: string;
   onSessionStopped: () => void;
   voiceChatConfig?: boolean | VoiceChatConfig;
 }> = ({
   mode,
   sessionAccessToken,
+  apiUrl,
   onSessionStopped,
   voiceChatConfig = true,
 }) => {
   return (
     <LiveAvatarContextProvider
       sessionAccessToken={sessionAccessToken}
+      apiUrl={apiUrl}
       voiceChatConfig={voiceChatConfig}
     >
       <LiveAvatarSessionComponent

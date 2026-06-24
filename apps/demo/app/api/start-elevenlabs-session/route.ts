@@ -1,5 +1,11 @@
 import { NextRequest } from "next/server";
-import { API_KEY, API_URL, AVATAR_ID, IS_SANDBOX } from "../secrets";
+import {
+  API_KEY,
+  API_URL,
+  AVATAR_ID,
+  IS_SANDBOX,
+  resolveElevenLabsAgentCredential,
+} from "../secrets";
 
 interface StartElevenLabsSessionRequestBody {
   agent_id?: string;
@@ -35,6 +41,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!API_KEY) {
+      return new Response(
+        JSON.stringify({ error: "LiveAvatar API key not configured" }),
+        { status: 500 },
+      );
+    }
+
+    let elevenLabsCredential: ReturnType<
+      typeof resolveElevenLabsAgentCredential
+    >;
+    try {
+      elevenLabsCredential = resolveElevenLabsAgentCredential(body.secret_id);
+    } catch (error) {
+      return new Response(JSON.stringify({ error: (error as Error).message }), {
+        status: 500,
+      });
+    }
+
     const res = await fetch(`${API_URL}/v1/sessions/token`, {
       method: "POST",
       headers: {
@@ -47,7 +71,7 @@ export async function POST(request: NextRequest) {
         is_sandbox: IS_SANDBOX,
         elevenlabs_agent_config: {
           agent_id: body.agent_id,
-          secret_id: body.secret_id,
+          ...elevenLabsCredential,
         },
       }),
     });
@@ -93,8 +117,11 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
-  return new Response(JSON.stringify({ session_token, session_id }), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
+  return new Response(
+    JSON.stringify({ session_token, session_id, api_url: API_URL }),
+    {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    },
+  );
 }

@@ -21,6 +21,14 @@ export async function POST(request: NextRequest) {
       .json()
       .catch(() => ({}));
     const pushToTalk = body.pushToTalk === true;
+
+    if (!API_KEY) {
+      return new Response(
+        JSON.stringify({ error: "LiveAvatar API key not configured" }),
+        { status: 500 },
+      );
+    }
+
     const res = await fetch(`${API_URL}/v1/sessions/token`, {
       method: "POST",
       headers: {
@@ -86,10 +94,13 @@ export async function POST(request: NextRequest) {
       status: 500,
     });
   }
-  return new Response(JSON.stringify({ session_token, session_id }), {
-    status: 200,
-    headers: {
-      "Content-Type": "application/json",
+  return new Response(
+    JSON.stringify({ session_token, session_id, api_url: API_URL }),
+    {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+      },
     },
-  });
+  );
 }

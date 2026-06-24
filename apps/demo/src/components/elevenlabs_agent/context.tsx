@@ -11,7 +11,8 @@ import {
   VoiceChatState,
   VoiceChatConfig,
 } from "@heygen/liveavatar-web-sdk";
-import { API_URL } from "../../../app/api/secrets";
+
+const DEFAULT_API_URL = "https://api.liveavatar.com";
 
 export type ElevenLabsInboundEvent = {
   event_id: string;
@@ -153,18 +154,20 @@ const ElevenLabsAgentContext = createContext<ContextValue>({
 type ProviderProps = {
   children: React.ReactNode;
   sessionAccessToken: string;
+  apiUrl?: string;
   voiceChatConfig?: boolean | VoiceChatConfig;
 };
 
 export const ElevenLabsAgentProvider = ({
   children,
   sessionAccessToken,
+  apiUrl = DEFAULT_API_URL,
   voiceChatConfig = true,
 }: ProviderProps) => {
   const sessionRef = useRef<ElevenLabsAgentSession>(
     new ElevenLabsAgentSession(sessionAccessToken, {
       voiceChat: voiceChatConfig,
-      apiUrl: API_URL,
+      apiUrl,
     }),
   );
 
