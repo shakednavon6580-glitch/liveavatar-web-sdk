@@ -32,6 +32,46 @@ const Btn: React.FC<{
 
 type Props = { onSessionStopped: () => void };
 
+type ExtendedVideoElement = HTMLVideoElement & {
+  webkitDecodedFrameCount?: number;
+  webkitDroppedFrameCount?: number;
+  getVideoPlaybackQuality?: () => VideoPlaybackQuality;
+};
+
+type VideoRenderDiagnostics = {
+  videoWidth: number | null;
+  videoHeight: number | null;
+  readyState: number | null;
+  paused: boolean | null;
+  muted: boolean | null;
+  currentTime: number | null;
+  totalVideoFrames: number | null;
+  droppedVideoFrames: number | null;
+  droppedFramePercentage: number | null;
+  getVideoPlaybackQualitySupported: boolean;
+  uiFps: number | null;
+  longTaskSupported: boolean;
+  longTaskCount: number;
+  lastLongTaskDuration: number | null;
+};
+
+const initialVideoRenderDiagnostics: VideoRenderDiagnostics = {
+  videoWidth: null,
+  videoHeight: null,
+  readyState: null,
+  paused: null,
+  muted: null,
+  currentTime: null,
+  totalVideoFrames: null,
+  droppedVideoFrames: null,
+  droppedFramePercentage: null,
+  getVideoPlaybackQualitySupported: false,
+  uiFps: null,
+  longTaskSupported: false,
+  longTaskCount: 0,
+  lastLongTaskDuration: null,
+};
+
 const formatTimestamp = (timestamp: number | null) => {
   if (!timestamp) return "n/a";
   return new Date(timestamp).toLocaleTimeString();
@@ -49,6 +89,33 @@ const formatElapsed = (timestamp: number | null, now: number) => {
 const getPcm24000Status = (hasPcm24000Metadata: boolean | null) => {
   if (hasPcm24000Metadata === null) return "unknown";
   return hasPcm24000Metadata ? "present" : "missing";
+};
+
+const getReadyStateLabel = (readyState: number | null) => {
+  switch (readyState) {
+    case HTMLMediaElement.HAVE_NOTHING:
+      return "HAVE_NOTHING";
+    case HTMLMediaElement.HAVE_METADATA:
+      return "HAVE_METADATA";
+    case HTMLMediaElement.HAVE_CURRENT_DATA:
+      return "HAVE_CURRENT_DATA";
+    case HTMLMediaElement.HAVE_FUTURE_DATA:
+      return "HAVE_FUTURE_DATA";
+    case HTMLMediaElement.HAVE_ENOUGH_DATA:
+      return "HAVE_ENOUGH_DATA";
+    default:
+      return "n/a";
+  }
+};
+
+const formatDiagnosticNumber = (value: number | null, fractionDigits = 0) => {
+  if (value === null || Number.isNaN(value)) return "n/a";
+  return value.toFixed(fractionDigits);
+};
+
+const formatPercentage = (value: number | null) => {
+  if (value === null || Number.isNaN(value)) return "n/a";
+  return `${value.toFixed(1)}%`;
 };
 
 const copyTextToClipboard = async (text: string) => {
@@ -132,6 +199,11 @@ export const SessionView: React.FC<Props> = ({ onSessionStopped }) => {
   const noEventsWarningRef = useRef(false);
   const missingPcmWarningRef = useRef(false);
   const repeatedErrorWarningAtRef = useRef<number | null>(null);
+  const frameTimestampsRef = useRef<number[]>([]);
+  const animationFrameRef = useRef<number | null>(null);
+  const longTaskCountRef = useRef(0);
+  const lastLongTaskDurationRef = useRef<number | null>(null);
+  const longTaskSupportedRef = useRef(false);
 
   const [userText, setUserText] = useState("");
   const [contextText, setContextText] = useState("");
@@ -139,6 +211,8 @@ export const SessionView: React.FC<Props> = ({ onSessionStopped }) => {
   const [now, setNow] = useState(() => Date.now());
   const [browserInfo, setBrowserInfo] = useState("n/a");
   const [snapshotCopied, setSnapshotCopied] = useState(false);
+  const [videoDiagnostics, setVideoDiagnostics] =
+    useState<VideoRenderDiagnostics>(initialVideoRenderDiagnostics);
   const snapshotCopiedTimeoutRef = useRef<number | null>(null);
 
   // Lifecycle: start once on mount, react to disconnect
@@ -201,6 +275,9 @@ export const SessionView: React.FC<Props> = ({ onSessionStopped }) => {
       if (snapshotCopiedTimeoutRef.current) {
         window.clearTimeout(snapshotCopiedTimeoutRef.current);
       }
+      if (animationFrameRef.current !== null) {
+        window.cancelAnimationFrame(animationFrameRef.current);
+      }
     };
   }, []);
 
@@ -258,6 +335,116 @@ export const SessionView: React.FC<Props> = ({ onSessionStopped }) => {
     sessionDebug.lastErrorType,
   ]);
 
+  useEffect(() => {
+    const measureFrameRate = (timestamp: number) => {
+      const nextTimestamps = frameTimestampsRef.current;
+      nextTimestamps.push(timestamp);
+      while (
+        nextTimestamps.length > 0 &&
+        timestamp - (nextTimestamps[0] ?? timestamp) > 2000
+      ) {
+        nextTimestamps.shift();
+      }
+      animationFrameRef.current =
+        window.requestAnimationFrame(measureFrameRate);
+    };
+
+    animationFrameRef.current = window.requestAnimationFrame(measureFrameRate);
+
+    return () => {
+      if (animationFrameRef.current !== null) {
+        window.cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof PerformanceObserver === "undefined") return;
+
+    const supportedEntryTypes = PerformanceObserver.supportedEntryTypes ?? [];
+    if (!supportedEntryTypes.includes("longtask")) return;
+
+    longTaskSupportedRef.current = true;
+
+    const observer = new PerformanceObserver((list) => {
+      const entries = list.getEntries();
+      if (entries.length === 0) return;
+
+      longTaskCountRef.current += entries.length;
+      lastLongTaskDurationRef.current =
+        entries[entries.length - 1]?.duration ?? null;
+    });
+
+    observer.observe({ entryTypes: ["longtask"] });
+
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const sampleDiagnostics = () => {
+      const video = videoRef.current as ExtendedVideoElement | null;
+      const playbackQuality = video?.getVideoPlaybackQuality?.();
+      const totalVideoFrames =
+        playbackQuality?.totalVideoFrames ??
+        video?.webkitDecodedFrameCount ??
+        null;
+      const droppedVideoFrames =
+        playbackQuality?.droppedVideoFrames ??
+        video?.webkitDroppedFrameCount ??
+        null;
+      const droppedFramePercentage =
+        totalVideoFrames && totalVideoFrames > 0 && droppedVideoFrames !== null
+          ? (droppedVideoFrames / totalVideoFrames) * 100
+          : null;
+      const frameTimestamps = frameTimestampsRef.current;
+      const firstFrameTimestamp = frameTimestamps[0];
+      const lastFrameTimestamp = frameTimestamps[frameTimestamps.length - 1];
+      const uiFps =
+        frameTimestamps.length >= 2 &&
+        firstFrameTimestamp !== undefined &&
+        lastFrameTimestamp !== undefined
+          ? ((frameTimestamps.length - 1) * 1000) /
+            (lastFrameTimestamp - firstFrameTimestamp)
+          : null;
+
+      setVideoDiagnostics({
+        videoWidth: video?.videoWidth ?? null,
+        videoHeight: video?.videoHeight ?? null,
+        readyState: video?.readyState ?? null,
+        paused: video?.paused ?? null,
+        muted: video?.muted ?? null,
+        currentTime:
+          video && Number.isFinite(video.currentTime)
+            ? Number(video.currentTime.toFixed(2))
+            : null,
+        totalVideoFrames,
+        droppedVideoFrames,
+        droppedFramePercentage:
+          droppedFramePercentage !== null
+            ? Number(droppedFramePercentage.toFixed(2))
+            : null,
+        getVideoPlaybackQualitySupported:
+          typeof video?.getVideoPlaybackQuality === "function",
+        uiFps:
+          uiFps !== null && Number.isFinite(uiFps)
+            ? Number(uiFps.toFixed(1))
+            : null,
+        longTaskSupported: longTaskSupportedRef.current,
+        longTaskCount: longTaskCountRef.current,
+        lastLongTaskDuration:
+          lastLongTaskDurationRef.current !== null
+            ? Number(lastLongTaskDurationRef.current.toFixed(1))
+            : null,
+      });
+    };
+
+    sampleDiagnostics();
+    const interval = window.setInterval(sampleDiagnostics, 1000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
   const stop = useCallback(() => sessionRef.current.stop(), [sessionRef]);
 
   const handleSendUserMessage = useCallback(() => {
@@ -310,6 +497,23 @@ export const SessionView: React.FC<Props> = ({ onSessionStopped }) => {
           null,
         user_agent: navigator.userAgent,
       },
+      video_render: {
+        video_width: videoDiagnostics.videoWidth,
+        video_height: videoDiagnostics.videoHeight,
+        ready_state: videoDiagnostics.readyState,
+        paused: videoDiagnostics.paused,
+        muted: videoDiagnostics.muted,
+        current_time: videoDiagnostics.currentTime,
+        total_video_frames: videoDiagnostics.totalVideoFrames,
+        dropped_video_frames: videoDiagnostics.droppedVideoFrames,
+        dropped_frame_percentage: videoDiagnostics.droppedFramePercentage,
+        get_video_playback_quality_supported:
+          videoDiagnostics.getVideoPlaybackQualitySupported,
+        ui_fps: videoDiagnostics.uiFps,
+        long_task_supported: videoDiagnostics.longTaskSupported,
+        long_task_count: videoDiagnostics.longTaskCount,
+        last_long_task_duration_ms: videoDiagnostics.lastLongTaskDuration,
+      },
     };
 
     await copyTextToClipboard(JSON.stringify(snapshot, null, 2));
@@ -332,6 +536,7 @@ export const SessionView: React.FC<Props> = ({ onSessionStopped }) => {
     sessionDebug.hasPcm24000Metadata,
     sessionDebug.lastEventType,
     sessionState,
+    videoDiagnostics,
     voiceChatState,
   ]);
 
@@ -480,6 +685,99 @@ export const SessionView: React.FC<Props> = ({ onSessionStopped }) => {
               />
               <DebugRow label="errors" value={sessionDebug.errorCount} />
               <DebugRow label="browser" value={browserInfo} />
+            </div>
+            <div className="mt-3 border-t border-white/10 pt-2">
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/80">
+                Video / Render Diagnostics
+              </p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                <DebugRow
+                  label="video size"
+                  value={
+                    videoDiagnostics.videoWidth !== null &&
+                    videoDiagnostics.videoHeight !== null
+                      ? `${videoDiagnostics.videoWidth} x ${videoDiagnostics.videoHeight}`
+                      : "n/a"
+                  }
+                />
+                <DebugRow
+                  label="readyState"
+                  value={
+                    videoDiagnostics.readyState !== null
+                      ? `${videoDiagnostics.readyState} (${getReadyStateLabel(videoDiagnostics.readyState)})`
+                      : "n/a"
+                  }
+                />
+                <DebugRow
+                  label="paused"
+                  value={
+                    videoDiagnostics.paused === null
+                      ? "n/a"
+                      : String(videoDiagnostics.paused)
+                  }
+                />
+                <DebugRow
+                  label="muted"
+                  value={
+                    videoDiagnostics.muted === null
+                      ? "n/a"
+                      : String(videoDiagnostics.muted)
+                  }
+                />
+                <DebugRow
+                  label="currentTime"
+                  value={formatDiagnosticNumber(
+                    videoDiagnostics.currentTime,
+                    2,
+                  )}
+                />
+                <DebugRow
+                  label="ui fps"
+                  value={formatDiagnosticNumber(videoDiagnostics.uiFps, 1)}
+                />
+                <DebugRow
+                  label="total frames"
+                  value={formatDiagnosticNumber(
+                    videoDiagnostics.totalVideoFrames,
+                  )}
+                />
+                <DebugRow
+                  label="dropped frames"
+                  value={formatDiagnosticNumber(
+                    videoDiagnostics.droppedVideoFrames,
+                  )}
+                />
+                <DebugRow
+                  label="drop %"
+                  value={formatPercentage(
+                    videoDiagnostics.droppedFramePercentage,
+                  )}
+                />
+                <DebugRow
+                  label="playbackQuality"
+                  value={
+                    videoDiagnostics.getVideoPlaybackQualitySupported
+                      ? "supported"
+                      : "unsupported"
+                  }
+                />
+                <DebugRow
+                  label="long tasks"
+                  value={
+                    videoDiagnostics.longTaskSupported
+                      ? videoDiagnostics.longTaskCount
+                      : "unsupported"
+                  }
+                />
+                <DebugRow
+                  label="last long task"
+                  value={
+                    videoDiagnostics.longTaskSupported
+                      ? `${formatDiagnosticNumber(videoDiagnostics.lastLongTaskDuration, 1)} ms`
+                      : "n/a"
+                  }
+                />
+              </div>
             </div>
           </div>
 
