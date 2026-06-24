@@ -4,7 +4,21 @@ import { API_KEY, API_URL, AVATAR_ID, IS_SANDBOX } from "../secrets";
 interface StartElevenLabsSessionRequestBody {
   agent_id?: string;
   secret_id?: string;
+  avatarPresetId?: string;
 }
+
+const DEFAULT_AVATAR_PRESET_ID = "default-business";
+
+const AVATAR_PRESETS: Record<string, string> = {
+  [DEFAULT_AVATAR_PRESET_ID]: AVATAR_ID,
+  // Add future selectable presets here only with real, verified LiveAvatar
+  // avatar_id values. Do not add placeholder IDs; unknown presets fall back.
+};
+
+const getAvatarId = (presetId?: string) => {
+  if (!presetId) return AVATAR_ID;
+  return AVATAR_PRESETS[presetId] ?? AVATAR_ID;
+};
 
 export async function POST(request: NextRequest) {
   let session_token = "";
@@ -29,7 +43,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         mode: "LITE",
-        avatar_id: AVATAR_ID,
+        avatar_id: getAvatarId(body.avatarPresetId),
         is_sandbox: IS_SANDBOX,
         elevenlabs_agent_config: {
           agent_id: body.agent_id,

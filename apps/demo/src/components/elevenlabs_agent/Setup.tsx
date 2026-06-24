@@ -18,9 +18,18 @@ const IMPORT_KEY_URL = "https://app.liveavatar.com/voices/third-party/import";
 
 const STORAGE_KEY = "liveavatar-demo:elevenlabs-agent-setup";
 
+const DEFAULT_AVATAR_PRESET_ID = "default-business";
+
+const AVATAR_PRESETS = [
+  { id: DEFAULT_AVATAR_PRESET_ID, label: "Default Business Avatar" },
+  // Add future selectable LiveAvatar presets here only after adding the
+  // matching real avatar_id in app/api/start-elevenlabs-session/route.ts.
+] as const;
+
 type StoredSetup = {
   agentId?: string;
   secretId?: string;
+  avatarPresetId?: string;
 };
 
 const loadStoredSetup = (): StoredSetup => {
@@ -42,10 +51,17 @@ const saveStoredSetup = (setup: StoredSetup): void => {
   }
 };
 
+const updateStoredSetup = (setup: StoredSetup): void => {
+  saveStoredSetup({ ...loadStoredSetup(), ...setup });
+};
+
 export const Setup = ({ onSessionStarted, onBack }: Props) => {
   const [secrets, setSecrets] = useState<Secret[]>([]);
   const [secretsLoading, setSecretsLoading] = useState(true);
   const [selectedSecretId, setSelectedSecretId] = useState("");
+  const [selectedAvatarPresetId, setSelectedAvatarPresetId] = useState<
+    (typeof AVATAR_PRESETS)[number]["id"]
+  >(DEFAULT_AVATAR_PRESET_ID);
   const [agentId, setAgentId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
@@ -55,6 +71,11 @@ export const Setup = ({ onSessionStarted, onBack }: Props) => {
     const stored = loadStoredSetup();
     if (stored.agentId) setAgentId(stored.agentId);
     if (stored.secretId) setSelectedSecretId(stored.secretId);
+    if (AVATAR_PRESETS.some((preset) => preset.id === stored.avatarPresetId)) {
+      setSelectedAvatarPresetId(
+        stored.avatarPresetId as (typeof AVATAR_PRESETS)[number]["id"],
+      );
+    }
   }, []);
 
   const loadSecrets = async () => {
@@ -88,6 +109,11 @@ export const Setup = ({ onSessionStarted, onBack }: Props) => {
     loadSecrets();
   }, []);
 
+  const handleAgentIdChange = (value: string) => {
+    setAgentId(value);
+    updateStoredSetup({ agentId: value });
+  };
+
   const handleStartCall = async () => {
     if (!selectedSecretId) {
       setError("Select an ElevenLabs API key.");
@@ -106,6 +132,7 @@ export const Setup = ({ onSessionStarted, onBack }: Props) => {
         body: JSON.stringify({
           agent_id: agentId.trim(),
           secret_id: selectedSecretId,
+          avatarPresetId: selectedAvatarPresetId,
         }),
       });
       if (!res.ok) {
@@ -117,6 +144,7 @@ export const Setup = ({ onSessionStarted, onBack }: Props) => {
       saveStoredSetup({
         agentId: agentId.trim(),
         secretId: selectedSecretId,
+        avatarPresetId: selectedAvatarPresetId,
       });
       onSessionStarted(session_token);
     } catch (e) {
@@ -190,10 +218,31 @@ export const Setup = ({ onSessionStarted, onBack }: Props) => {
         <input
           type="text"
           value={agentId}
-          onChange={(e) => setAgentId(e.target.value)}
+          onChange={(e) => handleAgentIdChange(e.target.value)}
           placeholder="agent_xxxxxxxxxxxxxxxxxx"
           className="w-full px-4 py-2.5 rounded-lg bg-white/5 text-white text-sm border border-white/10 focus:outline-none focus:border-white/30 placeholder-gray-500 transition-colors"
         />
+      </div>
+
+      <div className="w-full flex flex-col gap-2">
+        <label className="text-xs text-gray-500 uppercase tracking-wider">
+          Avatar
+        </label>
+        <select
+          value={selectedAvatarPresetId}
+          onChange={(e) =>
+            setSelectedAvatarPresetId(
+              e.target.value as (typeof AVATAR_PRESETS)[number]["id"],
+            )
+          }
+          className="w-full px-4 py-2.5 rounded-lg bg-white/5 text-white text-sm border border-white/10 focus:outline-none focus:border-white/30 transition-colors"
+        >
+          {AVATAR_PRESETS.map((preset) => (
+            <option key={preset.id} value={preset.id}>
+              {preset.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="w-full flex flex-col gap-3">
