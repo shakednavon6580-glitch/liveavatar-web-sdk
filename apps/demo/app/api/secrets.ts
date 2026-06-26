@@ -4,6 +4,13 @@ const readEnv = (name: string): string => {
   return value;
 };
 
+const readBooleanEnv = (name: string, defaultValue: boolean): boolean => {
+  const value = readEnv(name).toLowerCase();
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return defaultValue;
+};
+
 export const API_KEY = readEnv("LIVEAVATAR_API_KEY");
 export const API_URL =
   readEnv("LIVEAVATAR_API_URL") || "https://api.liveavatar.com";
@@ -12,7 +19,7 @@ export const AVATAR_ID =
 
 // When true, we will call everything in Sandbox mode.
 // Useful for integration and development.
-export const IS_SANDBOX = true;
+export const IS_SANDBOX = readBooleanEnv("LIVEAVATAR_IS_SANDBOX", true);
 
 // FULL MODE Customizations
 // Wayne's avatar voice and context
