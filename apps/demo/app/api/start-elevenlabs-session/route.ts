@@ -2,7 +2,6 @@ import { NextRequest } from "next/server";
 import {
   API_KEY,
   API_URL,
-  AVATAR_ID,
   IS_SANDBOX,
   resolveElevenLabsAgentCredential,
 } from "../secrets";
@@ -10,21 +9,8 @@ import {
 interface StartElevenLabsSessionRequestBody {
   agent_id?: string;
   secret_id?: string;
-  avatarPresetId?: string;
+  avatarId?: string;
 }
-
-const DEFAULT_AVATAR_PRESET_ID = "default-business";
-
-const AVATAR_PRESETS: Record<string, string> = {
-  [DEFAULT_AVATAR_PRESET_ID]: AVATAR_ID,
-  // Add future selectable presets here only with real, verified LiveAvatar
-  // avatar_id values. Do not add placeholder IDs; unknown presets fall back.
-};
-
-const getAvatarId = (presetId?: string) => {
-  if (!presetId) return AVATAR_ID;
-  return AVATAR_PRESETS[presetId] ?? AVATAR_ID;
-};
 
 export async function POST(request: NextRequest) {
   let session_token = "";
@@ -34,9 +20,11 @@ export async function POST(request: NextRequest) {
       .json()
       .catch(() => ({}));
 
-    if (!body.agent_id || !body.secret_id) {
+    if (!body.agent_id || !body.secret_id || !body.avatarId) {
       return new Response(
-        JSON.stringify({ error: "agent_id and secret_id are required" }),
+        JSON.stringify({
+          error: "agent_id, secret_id, and avatarId are required",
+        }),
         { status: 400 },
       );
     }
@@ -67,7 +55,7 @@ export async function POST(request: NextRequest) {
       },
       body: JSON.stringify({
         mode: "LITE",
-        avatar_id: getAvatarId(body.avatarPresetId),
+        avatar_id: body.avatarId,
         is_sandbox: IS_SANDBOX,
         elevenlabs_agent_config: {
           agent_id: body.agent_id,

@@ -1,0 +1,11 @@
+[
+  {
+    "id": "business-woman",
+    "name": "Business Woman",
+    "provider": "liveavatar",
+    "avatarId": "dd73ea75-1218-4ef3-92ce-606d5f7fbc0a",
+    "type": "public",
+    "description": "Default business avatar",
+    "isDefault": true
+  }
+]
